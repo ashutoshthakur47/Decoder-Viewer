@@ -1,0 +1,11 @@
+date=2026-10-20 time=10:00:01 devname="edge-fw01" action="accept" srcip=10.0.0.15 dstip=198.51.100.20 sentbyte=1520 dstport=443
+date=2026-10-20 time=10:00:04 devname="edge-fw01" action="accept" srcip=10.0.0.15 dstip=198.51.100.20 dstport=443 policy="web-out" app="HTTPS" sentbyte=88211
+date=2026-10-20 time=10:00:07 devname="edge-fw01" action="deny" srcip=10.0.0.23 dstip=203.0.113.9 dstport=3389 fw_rule_id="7" policy="block-rdp" sentbyte=0
+date=2026-10-20 time=10:00:09 devname="edge-fw02" action="accept" srcip=10.0.4.2 dstip=192.0.2.53 dstport=53 policy="dns-out" app="DNS" sentbyte=74 proto=17
+Oct 20 10:01:12 web01 sshd[2211]: Failed password for invalid user admin from 203.0.113.50 port 50122 ssh2
+Oct 20 10:01:15 web01 sshd[2211]: Failed password for invalid user oracle from 203.0.113.50 port 50140 ssh2
+Oct 20 10:02:40 web01 sshd[2290]: Accepted publickey for deploy from 10.0.0.8 port 40222 ssh2
+{"timestamp":"2026-10-20T10:03:00Z","host":"ws-042","event":"process_start","process":{"name":"powershell.exe","pid":4120,"cmdline":"powershell -nop -w hidden"},"user":"CORP\\jdoe"}
+{"timestamp":"2026-10-20T10:03:05Z","host":"ws-042","event":"dns_query","query":"updates.example.com","answer":"192.0.2.80"}
+Oct 20 10:05:00 nas01 backupd[88]: job=nightly status=failed files=1203 duration=3600
+Oct 20 10:35:00 nas01 backupd[88]: job=hourly status=ok files=88 duration=42

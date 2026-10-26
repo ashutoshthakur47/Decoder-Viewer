@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-canvas font-sans text-[13px] text-fg antialiased;
+    font-feature-settings: "ss01", "ss02";
+  }
+  ::selection {
+    @apply bg-fg/20;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2c2f35 transparent;
+  }
+  :focus-visible {
+    @apply outline-none ring-1 ring-fg-muted;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line bg-raised px-2.5 text-xs font-medium text-fg-soft transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply border-fg bg-fg text-canvas hover:bg-white hover:text-canvas;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent;
+  }
+  .btn-link {
+    @apply text-xs font-medium text-fg-soft underline-offset-2 hover:text-fg hover:underline disabled:opacity-40;
+  }
+  .icon-btn {
+    @apply inline-grid h-7 w-7 shrink-0 place-items-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-40;
+  }
+  .input {
+    @apply h-7 rounded-md border border-line bg-canvas px-2.5 text-xs text-fg transition-colors placeholder:text-fg-subtle hover:border-fg-subtle focus:border-fg-muted focus:outline-none;
+  }
+  .textarea {
+    @apply w-full resize-none rounded-md border border-line bg-canvas p-3 font-mono text-[11.5px] leading-[18px] text-fg placeholder:text-fg-subtle focus:border-fg-muted focus:outline-none;
+  }
+  .label {
+    @apply text-[10.5px] font-medium uppercase tracking-[0.08em] text-fg-subtle;
+  }
+  .badge {
+    @apply inline-flex h-[18px] items-center rounded px-1.5 text-[10px] font-medium uppercase tracking-wider;
+  }
+  .panel {
+    @apply rounded-lg border border-line-muted bg-canvas;
+  }
+}

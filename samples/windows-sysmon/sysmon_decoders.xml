@@ -1,0 +1,19 @@
+<!--
+  Testing decoders one at a time.
+
+  1. "Sysmon-EventID#1" is copied from Wazuh's ruleset/decoders/0380-windows_decoders.xml (GPLv2).
+     Its parent "windows" is NOT in this file, so Wazuh would reject it; the tool runs it alone.
+  2. "my-test" has only a name and a regex (no prematch, no order). Also run alone; the values are
+     named after the word in front of them (ProcessId, Image).
+-->
+<decoder name="Sysmon-EventID#1">
+    <parent>windows</parent>
+    <type>windows</type>
+    <prematch>INFORMATION\(1\)\.+HashType</prematch>
+    <regex>Image: (\.*) \s*CommandLine: \.* \s*User: (\.*) \s*LogonGuid: \S* \s*LogonId: \S* \s*TerminalSessionId: \S* \s*IntegrityLevel: \.*HashType: \S* \s*Hash: (\S*) \s*ParentProcessGuid: \S* \s*ParentProcessID: \S* \s*ParentImage: (\.*) \s*ParentCommandLine:</regex>
+    <order>sysmon.image,srcuser,sysmon.hash,sysmon.parentImage</order>
+</decoder>
+
+<decoder name="my-test">
+  <regex>ProcessId: (\d+)\s+Image: (\S+)</regex>
+</decoder>

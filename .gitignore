@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.analyzer-deps
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/node_modules/.vite/
+
+# Local editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Uploaded temp logs (normally outside the repo)
+uploads/
+*.tmp
+
+# Built UI, local env
+frontend/.env
+*.log.gz

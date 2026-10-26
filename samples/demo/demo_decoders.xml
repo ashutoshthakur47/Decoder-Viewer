@@ -1,0 +1,68 @@
+<!--
+  Demo decoders for demo.log: a made-up firewall ("acme-fw") and sshd.
+  Some gaps are on purpose so the tool has something to show:
+    - 'policy' and 'app' have no decoder                    -> not decoded
+    - the sentbyte regex needs a space after the number       -> broken when it is the last key
+    - sshd only decodes "invalid user" lines, not the port    -> not decoded
+-->
+<decoder name="acme-fw">
+  <prematch>^date=\d+-\d+-\d+ time=</prematch>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>^date=(\S+) time=(\S+)</regex>
+  <order>date, time</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\sdevname="(\.*)"</regex>
+  <order>devname</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\saction="(\.*)"</regex>
+  <order>action</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\ssrcip=(\S+)</regex>
+  <order>srcip</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\sdstip=(\S+)</regex>
+  <order>dstip</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\sdstport=(\d+)</regex>
+  <order>dstport</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\srule_id="(\.*)"</regex>
+  <order>rule_id</order>
+</decoder>
+
+<decoder name="acme-fw-fields">
+  <parent>acme-fw</parent>
+  <regex>\ssentbyte=(\d+)\s</regex>
+  <order>sentbyte</order>
+</decoder>
+
+<decoder name="sshd">
+  <program_name>^sshd</program_name>
+</decoder>
+
+<decoder name="sshd-fields">
+  <parent>sshd</parent>
+  <regex>for invalid user (\S+) from (\S+)</regex>
+  <order>srcuser, srcip</order>
+</decoder>
