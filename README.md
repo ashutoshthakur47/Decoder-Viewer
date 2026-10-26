@@ -90,9 +90,11 @@ cd frontend && npm run build
 The backend listens on 127.0.0.1:8000 and the UI on 127.0.0.1:5173; only the
 UI's origin may call the API from a browser.
 
-## Credits
+## License
+
+GNU General Public License v2.0, see [LICENSE](LICENSE).
 
 The decoding engine is a Python port of logic from
-[Wazuh](https://github.com/wazuh/wazuh) 4.11.2, and Wazuh's stock
+[Wazuh](https://github.com/wazuh/wazuh) 4.11.2 (GPLv2), and Wazuh's stock
 `0006-json_decoders.xml` is embedded. The FortiGate sample decoders are by
-Alexander Tibor Assenheimer. Wazuh and both decoder sets are licensed under GPLv2.
+Alexander Tibor Assenheimer (GPLv2).
