@@ -4,7 +4,7 @@ A local workbench for Wazuh decoders. Load decoder XML and raw logs, and see,
 character by character, what Wazuh extracts and what it leaves behind. Write a
 decoder, paste it, and the log updates at once; no Wazuh manager needed.
 
-![Log view with a FortiGate decoder set](docs/images/overview.png)
+![Log view with a FortiGate decoder set](docs/images/log-view.png)
 
 ## Features
 
@@ -24,11 +24,11 @@ decoder, paste it, and the log updates at once; no Wazuh manager needed.
 
 | Decoded line | Line with no decoder |
 |---|---|
-| ![Inspector on a decoded line](docs/images/decoded-line.png) | ![Children pasted without their root: the missing parent is suggested](docs/images/no-decoder-line.png) |
+| ![Inspector on a decoded line](docs/images/line-decoded.png) | ![Children pasted without their root: the missing parent is suggested](docs/images/missing-parent.png) |
 
 | Decoder tested alone | Loading decoders |
 |---|---|
-| ![Decoder without its parent, tested alone](docs/images/tested-alone.png) | ![Decoders dialog](docs/images/decoders-dialog.png) |
+| ![Decoder without its parent, tested alone](docs/images/windows-tested-alone.png) | ![Decoders dialog](docs/images/decoders.png) |
 
 ## Quick start
 
