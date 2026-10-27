@@ -190,6 +190,7 @@ def _scan_colon(text: str, start: int, end: int) -> List[KV]:
 
 
 _FIELD_SEP_RE = re.compile(r":\s")
+_NEXT_JSON_RE = re.compile(r"\s*(?=\{\s*\")")
 
 
 def _positional_fields(text: str, blocked: List[Tuple[int, int]]) -> List[Tuple[str, int, int]]:
@@ -678,6 +679,20 @@ class WazuhSpanEngine:
                 json_region = (lo, hi)
             kv_pairs = scan_kv(log, 0, json_region[0] if json_region else len(log), program_name)
 
+        # Wazuh's JSON_Decoder reads the first JSON value of a line and ignores the rest (cJSON_ParseWithOpts):
+        # a second event glued on the same line ("{...}{...}") is never decoded.
+        glued: List[JsonLeaf] = []
+        glued_regions: List[Tuple[int, int]] = []
+        pos = json_region[1] if json_region and not builtin else None
+        while pos is not None:
+            m = _NEXT_JSON_RE.match(log, pos)
+            parsed = parse_json(log, m.end()) if m else None
+            if not parsed:
+                break
+            glued += parsed[0]
+            glued_regions.append((parsed[1], parsed[2]))
+            pos = parsed[2]
+
         cap_intervals = sorted((s, e, i) for i, (_, s, e) in enumerate(caps) if s >= 0)
 
         def captured_in(s: int, e: int) -> List[int]:
@@ -701,6 +716,14 @@ class WazuhSpanEngine:
                         "this line (Wazuh's stock json decoder only reads lines that start with '{' and have no "
                         "syslog program name)."),
             ))
+        for leaf in glued:
+            if leaf.value is not None:
+                issues.append(Issue(
+                    kind="json", key=leaf.path, value=leaf.value, value_kind="json",
+                    start=leaf.key_start + log_start, end=leaf.end + log_start,
+                    reason=("Second JSON event on the same line: Wazuh's JSON decoder reads only the first JSON object "
+                            "of a line and ignores the rest, so this key is never extracted. Send one event per line."),
+                ))
 
         # Free-text values outside key=value pairs and JSON.
         values: List[Tuple[str, int, int, Optional[str]]] = []
@@ -710,6 +733,7 @@ class WazuhSpanEngine:
                 blocked.append(out.json_span)
             if json_region:
                 blocked.append(json_region)
+            blocked += glued_regions
             for kind, s, e in _value_tokens(log, blocked):
                 gs, ge = s + log_start, e + log_start
                 if captured_in(gs, ge):

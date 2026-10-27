@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { ClipboardPaste, Download, FileCode2, Pencil, Trash2, Upload, X } from "lucide-react";
 import type { DecoderFile, DecoderInfo } from "../types";
-import { cn, downloadText } from "../ui";
+import { STOCK_SUFFIX, cn, downloadText } from "../ui";
 
-const STOCK_SUFFIX = " (Wazuh default)"; // backend name of the auto-added stock JSON decoder file
 const PASTE_LIMIT = 5_000_000; // characters; a browser text box gets sluggish beyond a few MB
 
 function Modal({

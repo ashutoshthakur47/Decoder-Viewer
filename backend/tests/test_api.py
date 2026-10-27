@@ -135,3 +135,14 @@ def test_children_without_parent_get_the_parent_suggested_and_added(client: Test
     assert res["status"] == "decoded" and res["decoder"]["name"] == "my-fw" and not res["decoder"]["test"]
     assert {f["name"]: (f["value"], f["source"]) for f in res["fields"]} == {
         "srcip": ("10.0.0.1", "regex"), "dstip": ("10.0.0.2", "regex")}
+
+
+def test_json_event_is_decoded_by_the_default_json_decoder_not_the_loaded_files(client: TestClient):
+    # Only the demo decoders are loaded; a JSON event is still decoded, by Wazuh's default JSON decoder.
+    event = '{"win":{"system":{"eventID":"4624"},"eventdata":{"targetUserName":"jdoe"}}}'
+    res = client.post("/api/analyze/single", json={"raw_line": event}).json()
+    assert res["decoder"]["name"] == "json" and res["decoder"]["file"] == "0006-json_decoders.xml (Wazuh default)"
+    assert res["issues"] == [] and len(res["fields"]) == 2
+    client.post("/api/decoders/load", json={"stock_json": False})
+    res = client.post("/api/analyze/single", json={"raw_line": event}).json()
+    assert res["status"] == "no_decoder" and [i["kind"] for i in res["issues"]] == ["json", "json"]

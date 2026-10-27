@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { api } from "../api";
 import type { AnalyzedLine, FilterMode } from "../types";
-import { TOKEN_CLASS, cn, formatNumber } from "../ui";
+import { STOCK_SUFFIX, TOKEN_CLASS, cn, formatNumber } from "../ui";
 import LogLine from "./LogLine";
 
 const CHUNK = 100;
@@ -137,7 +137,7 @@ export default function LogList({ totalLines, filter, filterKey, reloadToken, se
         <span className="tabular-nums">
           {isFiltered
             ? `${formatNumber(filtered.length)} matching line${filtered.length === 1 ? "" : "s"}`
-            : `${formatNumber(totalLines)} lines`}
+            : `${formatNumber(totalLines)} line${totalLines === 1 ? "" : "s"}`}
         </span>
         <span className="ml-auto flex items-center gap-3 font-mono text-[11px]">
           {LEGEND.map(([s, label]) => (
@@ -194,6 +194,11 @@ function Row({ line, selected, onSelect }: { line: AnalyzedLine; selected: boole
         >
           <span className="truncate">{line.decoder?.name ?? STATUS_LABEL[line.status]}</span>
           {test ? <span className="badge h-4 shrink-0 bg-test/15 px-1 text-[9px] text-test">test</span> : null}
+          {line.decoder?.file?.endsWith(STOCK_SUFFIX) ? (
+            <span className="badge h-4 shrink-0 bg-hover px-1 text-[9px] text-fg-muted" title="Wazuh's default JSON decoder, added automatically">
+              default
+            </span>
+          ) : null}
         </span>
         <span className="block text-fg-muted">
           {line.counts.fields} fields

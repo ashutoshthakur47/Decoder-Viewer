@@ -1,5 +1,8 @@
 import type { IssueKind, TokenState } from "./types";
 
+/** Name suffix of the stock JSON decoder file the backend adds when no loaded file reads JSON. */
+export const STOCK_SUFFIX = " (Wazuh default)";
+
 export function cn(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(" ");
 }

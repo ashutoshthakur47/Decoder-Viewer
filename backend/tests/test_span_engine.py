@@ -121,6 +121,20 @@ def test_key_read_only_by_another_formats_child_is_missing_not_broken():
     assert {i.key: i.kind for i in res.issues} == {"type": "missing", "y": "missing"}
 
 
+EVENT = '{"win":{"system":{"eventID":"4624","computer":"WS-01"},"eventdata":{"targetUserName":"jdoe","ipAddress":"192.0.2.10"}}}'
+
+
+def test_second_json_event_on_one_line_is_reported_not_decoded():
+    # Wazuh's JSON decoder reads the first object of a line only; a glued second event is lost.
+    res = engine_for(JSON_XML).analyze(EVENT + EVENT.replace("jdoe", "asmith"))
+    assert fields(res) == {"win.system.eventID": "4624", "win.system.computer": "WS-01",
+                           "win.eventdata.targetUserName": "jdoe", "win.eventdata.ipAddress": "192.0.2.10"}
+    assert [i.kind for i in res.issues] == ["json"] * 4
+    assert {i.key: i.value for i in res.issues}["win.eventdata.targetUserName"] == "asmith"
+    assert all(i.reason.startswith("Second JSON event on the same line") for i in res.issues)
+    assert engine_for(JSON_XML).analyze(EVENT).issues == []  # one event per line: nothing left
+
+
 def test_generated_prematch_never_embeds_a_date():
     sug = engine_for("").format_suggestion(["date=2026-10-27 time=10:00:00 a=1", "date=2026-10-27 time=11:00:00 a=2"])
     assert r"<prematch>^date=\S+ time=</prematch>" in sug.xml

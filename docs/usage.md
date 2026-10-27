@@ -10,7 +10,7 @@ Click **Decoders** (top left).
 | **Paste → Replace all** | Drops every loaded file and keeps only the pasted XML. |
 | **Upload** | One or many `.xml` files (for example Wazuh's `ruleset/decoders` plus your `etc/decoders`). Replaces the loaded set; files load in name order, like Wazuh. |
 | Edit / Download / Remove | Per loaded file. Edits stay in the tool until you download the file; your files on disk are never changed. |
-| Default JSON decoder | When no loaded file uses `JSON_Decoder`, Wazuh's stock `json` decoder is added, as on a real manager. Untick to test only your own files. |
+| Default JSON decoder | When no loaded file uses `JSON_Decoder`, Wazuh's stock `json` decoder is added, as on a real manager. It decodes every key of a JSON event, so JSON lines show as decoded even with none of your decoders involved; such lines carry a `default` tag. Untick to test only your own files. |
 
 ## 2. Test a single decoder
 

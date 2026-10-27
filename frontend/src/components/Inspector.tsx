@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { AnalyzedLine, Issue, Suggestion } from "../types";
-import { KIND_META, cn } from "../ui";
+import { KIND_META, STOCK_SUFFIX, cn } from "../ui";
 import LogLine from "./LogLine";
 import SuggestionBox from "./SuggestionBox";
 
@@ -49,7 +49,10 @@ export default function Inspector({ line, busy, onClose, onApply, onCopy }: Prop
                   {dec.parent ? <> · parent <span className="font-mono">{dec.parent}</span></> : null}
                   {dec.builtin
                     ? " · built into Wazuh"
-                    : ` · ${dec.xml_name === dec.name ? "" : dec.xml_name + " "}(${dec.file}:${dec.xml_line})`}
+                    : dec.file?.endsWith(STOCK_SUFFIX)
+                      ? " · Wazuh's default JSON decoder, added because no loaded file reads JSON (every manager has it). " +
+                        "It decodes every JSON key; untick it in Decoders to test only your own decoders."
+                      : ` · ${dec.xml_name === dec.name ? "" : dec.xml_name + " "}(${dec.file}:${dec.xml_line})`}
                 </>
               )}
             </p>
