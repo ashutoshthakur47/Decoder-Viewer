@@ -32,8 +32,9 @@ on every line instead:
 - a banner lists how many decoders run alone.
 
 The same applies to a child whose `<parent>` is not loaded yet, or a sibling
-with `offset="after_regex"` and no earlier regex. Add the parent later and the
-decoder joins the tree; the `test` tag disappears.
+with `offset="after_regex"` and no earlier regex. The line then suggests the
+missing parent root: **Add decoder** puts it before your children, they join the
+tree, and the `test` tag disappears.
 
 A decoder tested alone never changes what the real tree decodes: if a loaded
 decoder already captures a value, that wins.
@@ -65,7 +66,9 @@ Hover a value for its field name. Click a line to open the **inspector**:
 
 - **Decoder**: which decoder matched, the header fields (timestamp, hostname,
   program_name) and every decoded field;
-- **Suggested decoder for this format**: when no decoder matched at all;
+- **Suggested decoder**: when no decoder matched. If your decoders name a
+  `<parent>` that is not loaded, this is that parent root (placed before them
+  when added); otherwise a full root + child set for the format;
 - **Not decoded**: each value left behind, why, and a fix;
 - **Trace**: every decoder tried, in Wazuh's order, and whether it matched.
   When no decoder matches, the root prematches that failed are listed, so a

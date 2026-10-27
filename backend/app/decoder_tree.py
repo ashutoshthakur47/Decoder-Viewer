@@ -77,7 +77,7 @@ class Decoder:
         expressions that compile: it can still be run alone on a log to test it."""
         compiled = all(raw is None or expr is not None for raw, expr in (
             (self.regex_raw, self.regex), (self.prematch_raw, self.prematch), (self.program_name_raw, self.program_name)))
-        # shortcut: plugin decoders (JSON_Decoder) are not run alone; add it if JSON children get tested without a parent
+        # shortcut: plugin decoders (JSON_Decoder) are not run alone; add if JSON children get tested without a parent
         return bool(self.errors and self.name and not self.plugin and compiled and (self.regex or self.prematch))
 
 

@@ -303,7 +303,7 @@ def split_branches(pattern: str) -> List[str]:
     return parts
 
 
-_KEY_BEFORE_GROUP_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_.\-]*)=$")
+_KEY_BEFORE_GROUP_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_.\-]*)(?:=|:[ \0]*)$")  # key= or "Key: "
 
 
 def group_keys(pattern: str) -> List[List[Optional[str]]]:

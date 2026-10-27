@@ -57,6 +57,13 @@ Shows decoders **tested alone**. `sysmon_decoders.xml` holds:
 Wazuh would reject both. The tool runs each alone and marks what they capture
 with a dashed cyan underline and a `test` tag: `sysmon.image`, `srcuser`,
 `sysmon.hash`, `sysmon.parentImage`, `ProcessId`, `Image` on the two Sysmon lines.
-The third line (an Application event) matches neither.
+Everything else is marked not decoded: the `Key: value` pairs (`UtcTime`,
+`ProcessGuid`, `LogonId`, ...) and the WinEvtLog header fields (channel, level,
+provider, user, domain, computer). The third line (an Application event) matches
+neither decoder.
+
+The line also suggests the missing parent, Wazuh's `windows` root
+(`<program_name>^WinEvtLog$</program_name>`). Add it and `Sysmon-EventID#1`
+decodes for real; `my-test` has no parent and stays a test.
 
 The log lines are from Wazuh's `ruleset/testing` suite (GPLv2).

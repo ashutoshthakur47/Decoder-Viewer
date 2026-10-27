@@ -217,6 +217,13 @@ def _apply_patch(files: List[Tuple[str, str]], tree: DecoderTree, patch: Decoder
             _, end = _decoder_block(xml, last.line)
             files[index[last.file]] = (name, xml[:end] + "\n\n" + snippet + "\n" + xml[end:])
             return files
+    first = re.search(r'<decoder name="([^"]+)">(?:(?!</decoder>).)*</decoder>', snippet, flags=re.S)
+    users = [d for d in tree.decoders if first and "<parent>" not in first.group(0) and d.parent == first.group(1)]
+    if users:  # a root must be loaded before the decoders that name it as <parent>
+        name, xml = files[index[users[0].file]]
+        start, _ = _decoder_block(xml, users[0].line)
+        files[index[users[0].file]] = (name, xml[:start] + snippet + "\n\n" + xml[start:])
+        return files
     if LOCAL_FILE in index:
         name, xml = files[index[LOCAL_FILE]]
         files[index[LOCAL_FILE]] = (name, xml.rstrip() + "\n\n" + snippet + "\n")

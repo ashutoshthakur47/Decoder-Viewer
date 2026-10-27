@@ -64,10 +64,10 @@ the message is scanned with generic patterns:
 
 | Kind | Found by |
 |---|---|
-| missing | `key=value` / `key="value"` pairs (and CEF/LEEF headers) with no capture |
-| broken | a missing key that a decoder in the active tree targets; the reason is diagnosed (not reached, regex did not match, trailing `\s` at end of line…) |
+| missing | `key=value` / `key="value"` pairs, CEF/LEEF headers, and `Key: value` pairs separated by two spaces or a tab (Windows, Sysmon) with no capture |
+| broken | a missing key that a decoder for this log format targets (not one selected by another child's prematch); the reason is diagnosed (not reached, regex did not match, trailing `\s` at end of line…) |
 | json | JSON keys when no JSON decoder ran |
-| value | IPs, IPv6, MACs, e-mails, URLs, paths, hashes, quoted text and numbers left in free text |
+| value | IPs, IPv6, MACs, e-mails, URLs, paths, hashes, quoted text and numbers left in free text, and the fields of a positional `a: b: c: d:` header at the start of the message (WinEvtLog: channel, level, provider, user, domain, computer) |
 
 A value captured from inside a longer key (`rule_id="` matching inside
 `fw_rule_id="`) counts as decoded: the tool cannot know whether that was meant.

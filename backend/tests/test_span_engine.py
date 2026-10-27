@@ -87,6 +87,45 @@ def test_value_inside_a_longer_key_counts_as_decoded():
     assert any(t.state == TokenState.CAPTURED and t.text == "102" for t in res.tokens)
 
 
+WINEVT = ("2014 Dec 20 09:29:47 WinEvtLog: Microsoft-Windows-Sysmon/Operational: INFORMATION(1): "
+          "Microsoft-Windows-Sysmon: SYSTEM: NT AUTHORITY: HOST1: Process Create:  UtcTime: 12/20/2014 2:29 PM  "
+          r"ProcessId: 3048  Image: C:\Windows\a.exe  Subject:  Security ID:  S-1-0-0  Account Name:  -")
+WINEVT_XML = (r'<decoder name="w"><program_name>^WinEvtLog</program_name></decoder>'
+              r'<decoder name="w-img"><parent>w</parent><regex>Image: (\S+)</regex><order>image</order></decoder>')
+
+
+def test_colon_pairs_and_positional_header_are_checked():
+    res = engine_for(WINEVT_XML).analyze(WINEVT)
+    assert fields(res) == {"image": r"C:\Windows\a.exe"}
+    # "Key: value" pairs (two spaces apart); "Subject:" has no value, "-" means none
+    assert {i.key: i.value for i in res.issues if i.kind == "missing"} == {
+        "UtcTime": "12/20/2014 2:29 PM", "ProcessId": "3048", "Security ID": "S-1-0-0"}
+    # the "a: b: c: d:" header fields no decoder reads
+    assert [i.value for i in res.issues if i.value_kind == "field"] == [
+        "Microsoft-Windows-Sysmon/Operational", "INFORMATION(1)", "Microsoft-Windows-Sysmon", "SYSTEM",
+        "NT AUTHORITY", "HOST1", "Process Create"]
+    # left grey: only labels without a value ("Subject:") and empty values ("-")
+    assert [t.text.strip() for t in res.tokens if t.state == TokenState.TEXT and t.text.strip(" :")] == [
+        "Subject:", "Account Name:  -"]
+    # the generated decoder for a value with spaces captures exactly that value
+    sug = next(i for i in res.issues if i.key == "UtcTime").suggestion
+    res = engine_for(WINEVT_XML + sug.xml).analyze(WINEVT)
+    assert fields(res)["UtcTime"] == "12/20/2014 2:29 PM"
+
+
+def test_key_read_only_by_another_formats_child_is_missing_not_broken():
+    xml = r"""<decoder name="r"><prematch>^r:</prematch></decoder>
+    <decoder name="a"><parent>r</parent><prematch>type=a</prematch><regex>\sx=(\d+)</regex><order>x</order></decoder>
+    <decoder name="b"><parent>r</parent><prematch>type=b</prematch><regex>\sy=(\d+)</regex><order>y</order></decoder>"""
+    res = engine_for(xml).analyze("r: type=a x=1 y=2")
+    assert {i.key: i.kind for i in res.issues} == {"type": "missing", "y": "missing"}
+
+
+def test_generated_prematch_never_embeds_a_date():
+    sug = engine_for("").format_suggestion(["date=2026-10-27 time=10:00:00 a=1", "date=2026-10-27 time=11:00:00 a=2"])
+    assert r"<prematch>^date=\S+ time=</prematch>" in sug.xml
+
+
 def test_no_decoder_trace_lists_the_root_prematches_that_failed():
     res = engine_for(FW_XML).analyze("other=1 device=x")  # prematch is ^device=
     assert res.status == "no_decoder"

@@ -114,3 +114,24 @@ def test_remove_file_and_default_json_switch(client: TestClient):
     tree = client.post("/api/decoders/load", json={"remove": "demo_decoders.xml"}).json()["decoder_tree"]
     assert [f["name"] for f in tree["files"]] == [stock]
     assert client.post("/api/decoders/load", json={"remove": "nope.xml"}).status_code == 400
+
+
+def test_children_without_parent_get_the_parent_suggested_and_added(client: TestClient):
+    """Paste children one by one, no root yet: they are tested alone, the line suggests the missing parent,
+    and adding it (placed before them) makes them real children."""
+    children = "".join(
+        rf'<decoder name="fw-fields"><parent>my-fw</parent><regex>\s{k}=(\S+)</regex><order>{k}</order></decoder>'
+        for k in ("srcip", "dstip"))
+    client.post("/api/decoders/load", files=[("files", ("kids.xml", children.encode()))])
+    line = "date=2026-10-27 time=10:00:00 devname=fw1 srcip=10.0.0.1 dstip=10.0.0.2"
+    res = client.post("/api/analyze/single", json={"raw_line": line}).json()
+    assert res["status"] == "no_decoder" and res["decoder"]["test"] is True
+    sug = res["new_decoder"]
+    assert '<decoder name="my-fw">' in sug["xml"] and r"<prematch>^date=\S+ time=</prematch>" in sug["xml"]
+    state = client.post("/api/decoders/patch", json={"action": "add_decoder", "xml": sug["xml"]}).json()
+    assert state["decoder_tree"]["invalid"] == 0
+    assert state["decoder_tree"]["files"][-1]["xml"].startswith('<decoder name="my-fw">')  # root first
+    res = client.post("/api/analyze/single", json={"raw_line": line}).json()
+    assert res["status"] == "decoded" and res["decoder"]["name"] == "my-fw" and not res["decoder"]["test"]
+    assert {f["name"]: (f["value"], f["source"]) for f in res["fields"]} == {
+        "srcip": ("10.0.0.1", "regex"), "dstip": ("10.0.0.2", "regex")}

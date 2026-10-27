@@ -38,6 +38,9 @@ from .schemas import (
 
 # --------------------------------------------------------------------------- KV scanning
 _KEY_RE = re.compile(r"(?<![^\s,;|{(\[])([A-Za-z_][A-Za-z0-9_.\-]*)=")
+# "Key: value" pairs separated by two spaces or a tab (Windows / Sysmon text: "ProcessId: 42  Image: C:\x.exe").
+_COLON_KEY_RE = re.compile(r"(?:^|(?<=\s\s)|(?<=\t))([A-Za-z][\w.\-/]*(?: [A-Za-z][\w.\-/]*){0,3}):(?=[ \t])")
+_COLON_VALUE_END_RE = re.compile(r"\s\s|\t")
 _CEF_RE = re.compile(r"CEF:\d+\|")
 _LEEF_RE = re.compile(r"LEEF:\d+(?:\.\d+)?\|")
 _CEF_HEADER = ["cef_version", "device_vendor", "device_product", "device_version", "signature_id", "name", "severity"]
@@ -76,6 +79,7 @@ class KV:
     quoted: bool
     value: str
     header: bool = False  # CEF/LEEF header field (no "key=" in the text)
+    sep: str = "="  # ":" for "Key: value" text (Windows / Sysmon)
 
 
 def _scan_quoted(text: str, i: int, end: int) -> int:
@@ -125,6 +129,7 @@ def scan_kv(text: str, start: int, end: int, program_name: Optional[str] = None)
                 break
         start = min(pos, end)
 
+    colon = [] if pos is not None else _scan_colon(text, start, end)
     pos = start
     while pos < end:
         m = _KEY_RE.search(text, pos, end)
@@ -154,7 +159,60 @@ def scan_kv(text: str, start: int, end: int, program_name: Optional[str] = None)
             pair = KV(m.group(1), m.start(), vs, j, j, False, text[vs:j])
         pairs.append(pair)
         pos = max(pair.end, m.end())
+    if colon:  # a key=value inside a "Key: value" value ("Hashes: SHA1=...") belongs to that value
+        pairs = [p for p in pairs if not any(c.vstart <= p.start < c.vend for c in colon)]
+        pairs = sorted(pairs + colon, key=lambda p: p.start)
     return pairs
+
+
+def _scan_colon(text: str, start: int, end: int) -> List[KV]:
+    """``Key: value`` pairs; a value ends at two spaces or a tab. Needs two pairs on the line, so a lone
+    "Error: ..." in free text is not taken for a field; '-' (Windows for 'none') counts as empty."""
+    pairs: List[KV] = []
+    for m in _COLON_KEY_RE.finditer(text, start, end):
+        vs = m.end()
+        while vs < end and text[vs] in " \t":
+            vs += 1
+        if _COLON_KEY_RE.match(text, vs, end):
+            continue  # "Subject:  Security ID: ..." - no value of its own
+        stop = _COLON_VALUE_END_RE.search(text, vs, end)
+        ve = stop.start() if stop else end
+        while ve > vs and text[ve - 1].isspace():
+            ve -= 1
+        if pairs and m.start() < pairs[-1].end:
+            continue  # inside the previous value
+        pairs.append(KV(m.group(1), m.start(), vs, ve, ve, False, text[vs:ve], sep=":"))
+    # dropped: empty / '-' values, labels ("Process Information:  Process ID:"), and at the line start a value
+    # holding more "x: " separators - that is a positional header (WinEvtLog "Channel: LEVEL(1): ..."), not a pair
+    pairs = [p for p in pairs if p.value and p.value != "-" and not p.value.endswith(":")
+             and not (p.start == start and ": " in p.value)]
+    return pairs if len(pairs) >= 2 else []
+
+
+_FIELD_SEP_RE = re.compile(r":\s")
+
+
+def _positional_fields(text: str, blocked: List[Tuple[int, int]]) -> List[Tuple[str, int, int]]:
+    """Fields of a ``a: b: c: d: message`` header at the start of the message (WinEvtLog, some appliances):
+    four or more short segments (up to four words, no sentence) each followed by ': '. The message is not."""
+    run: List[Tuple[int, int]] = []
+    pos = 0
+    for m in _FIELD_SEP_RE.finditer(text):
+        s, e = pos, m.start()
+        while s < e and text[s].isspace():
+            s += 1
+        seg = text[s:e]
+        if not (0 < len(seg) <= 64 and len(seg.split()) <= 4 and ":" not in seg and ". " not in seg
+                and "  " not in seg and not any(bs < e and be > s for bs, be in blocked)):
+            break
+        run.append((s, e))
+        pos = m.end()
+    return [("field", s, e) for s, e in run] if len(run) >= 4 else []
+
+
+def _gap(log: str, kv: KV) -> str:
+    """Whitespace between "Key:" and its value (colon pairs)."""
+    return log[kv.start + len(kv.key) + 1:kv.vstart]
 
 
 def value_shape(kv: KV) -> str:
@@ -162,7 +220,7 @@ def value_shape(kv: KV) -> str:
         return "quoted"
     if kv.value.isdigit():
         return "integer"
-    return "token"
+    return "text" if " " in kv.value else "token"
 
 
 # --------------------------------------------------------------------------- XML suggestions
@@ -182,12 +240,21 @@ def decoder_xml(name: str, parent: Optional[str], regex: str, order: List[str], 
     return "\n".join(lines)
 
 
-def kv_regex(key: str, shapes: set, prefixes: set, mode: str = "plain") -> Tuple[str, str]:
+def kv_regex(key: str, shapes: set, prefixes: set, mode: str = "plain", gap: str = " ") -> Tuple[str, str]:
     """(regex, type) that captures ``key``'s value for the observed shapes / preceding chars.
 
     mode: plain (OS_Regex), cef / leef (PCRE2: values with spaces / tab separated),
-    case (PCRE2, case-sensitive: for keys that differ only by case, e.g. auditd SYSCALL= vs syscall=).
+    case (PCRE2, case-sensitive: for keys that differ only by case, e.g. auditd SYSCALL= vs syscall=),
+    colon ("Key: value" text; ``gap`` is the whitespace after the colon, a value ends at two spaces).
     """
+    if mode == "colon":
+        head = escape_literal(key) + ":" + "".join(r"\t" if c == "\t" else r"\s" for c in gap)
+        if "text" in shapes:  # value with spaces: up to the two-space separator, or the end of the line
+            cores = [head + r"(\.*)\s\s", head + r"(\.*)$"]
+        else:
+            cores = [head + (r"(\d+)" if shapes == {"integer"} else r"(\S+)")]
+        anchors = sorted({"^" if p == "" else (r"\t" if p == "\t" else r"\s") for p in prefixes})
+        return "|".join(a + c for c in cores for a in anchors), "osregex"
     k = re.escape(key)
     if mode == "cef":
         return rf"(?:^|[\s|]){k}=((?:[^\\\s]|\\.|\s(?![A-Za-z_][\w.\-]*=))*)", "pcre2"
@@ -231,12 +298,14 @@ def captures_exactly(regex: str, rtype: str, log: str, s: int, e: int) -> bool:
 def verified_kv_regex(occurrences: List[Tuple[str, "KV"]], mode: str) -> Optional[Tuple[str, str]]:
     """One regex for a key, covering every (log, pair) sample; the one that captures the most samples
     exactly (all, ideally), else None."""
-    key = occurrences[0][1].key
+    log0, kv0 = occurrences[0]
+    key = kv0.key
     shapes = {value_shape(kv) for _, kv in occurrences}
     prefixes = {log[kv.start - 1] if kv.start > 0 else "" for log, kv in occurrences}
+    modes = ["colon"] if kv0.sep == ":" else [mode] if mode != "plain" else ["plain", "case"]
     best, best_hits = None, 0
-    for m in ([mode] if mode != "plain" else ["plain", "case"]):
-        regex, rtype = kv_regex(key, shapes, prefixes, m)
+    for m in modes:
+        regex, rtype = kv_regex(key, shapes, prefixes, m, _gap(log0, kv0))
         hits = sum(captures_exactly(regex, rtype, log, kv.vstart, kv.vend) for log, kv in occurrences)
         if hits == len(occurrences):
             return regex, rtype
@@ -300,18 +369,25 @@ def value_field(kind: str, context: Optional[str]) -> str:
 
 
 def _kv_prematch(samples) -> str:
-    """Prematch for a key=value format: the first key, plus its value and the next key when every
-    sample agrees (SonicWall 'id=firewall sn=' rather than a bare 'id=')."""
+    """Prematch for a key=value format: the first key, its value when every sample has the same word
+    (SonicWall 'id=firewall'; never a date or number, which change), and the next key when every sample
+    has it right after: 'id=firewall sn=', 'date=\\S+ time='."""
     firsts = [[kv for kv in s[2] if not kv.header and kv.value][:2] for s in samples]
     log0, (k0, *rest) = samples[0][0], firsts[0]
-    out = ("^" if k0.start == 0 else "") + escape_literal(k0.key) + "="
-    same_value = all(f[0].key == k0.key and f[0].value == k0.value and not f[0].quoted for f in firsts)
-    if same_value and re.fullmatch(r"[\w.\-]{1,30}", k0.value):
+    out = ("^" if k0.start == 0 else "") + escape_literal(k0.key) + k0.sep
+    if k0.sep != "=" or k0.quoted:
+        return out
+    word = re.fullmatch(r"[A-Za-z][\w.\-]{0,29}", k0.value) and all(
+        f[0].key == k0.key and f[0].value == k0.value and not f[0].quoted for f in firsts)
+    k1 = rest[0] if rest else None
+    next_key = k1 is not None and all(len(f) > 1 and f[0].key == k0.key and not f[0].quoted and f[1].key == k1.key
+                                      and s[0][f[0].vend:f[1].start] == " " for f, s in zip(firsts, samples))
+    if word:
         out += escape_literal(k0.value)
-        k1 = rest[0] if rest else None
-        if k1 and log0[k0.vend:k1.start] == " " and all(
-                len(f) > 1 and f[1].key == k1.key and s[0][f[0].vend:f[1].start] == " " for f, s in zip(firsts, samples)):
-            out += " " + escape_literal(k1.key) + "="
+    elif next_key:
+        out += r"\S+"
+    if next_key:
+        out += " " + escape_literal(k1.key) + "="
     return out
 
 
@@ -653,7 +729,10 @@ class WazuhSpanEngine:
 
         new_decoder = None
         if detail and not builtin and out.root is None:
-            new_decoder = self._format_suggestion([(log, program_name, kv_pairs, json_at if json_region else None, values)])
+            # decoders tested alone that name a missing <parent>: suggest that parent, not a new decoder set
+            parent = next((c.decoder.parent for c in out.captures if c.source == "test" and c.decoder.parent), None)
+            new_decoder = self._format_suggestion([(log, program_name, kv_pairs, json_at if json_region else None,
+                                                    values)], parent)
 
         # ---- fields list -----------------------------------------------------
         for i, (cap, s, e) in enumerate(caps):
@@ -726,7 +805,7 @@ class WazuhSpanEngine:
         active = set()
         if out.root is not None:
             active = {d.uid for d in out.root.children} | {out.root.uid}
-        target = next((d for d in candidates if d.uid in active), None)
+        target = next((d for d in candidates if d.uid in active and self._same_format(d, out)), None)
 
         if target is None or kv.header:
             label = "CEF/LEEF header field" if kv.header else "key"
@@ -755,6 +834,15 @@ class WazuhSpanEngine:
                 issue.suggestion = self._kv_child_suggestion(kv, log, out, mode)
         return issue
 
+    @staticmethod
+    def _same_format(dec: Decoder, out: _Outcome) -> bool:
+        """False for a child meant for another log format: its group starts with a <prematch> that did not
+        select this line (Sysmon event 1 'new' decoders on an 'old' event 1 line). Such a key is missing, not broken."""
+        if out.root is None or dec is out.root or dec.uid in out.evaluated:
+            return True
+        head = next((c for c in out.root.children if c.name == dec.name), dec)
+        return head.prematch_raw is None or head is out.decoder
+
     def _diagnose(self, dec: Decoder, kv: KV, log: str, out: _Outcome) -> Tuple[str, Optional[str]]:
         where = f"'{dec.name}' ({dec.file}:{dec.line})"
         state = out.evaluated.get(dec.uid)
@@ -766,7 +854,7 @@ class WazuhSpanEngine:
             for cap in out.captures:
                 if cap.decoder is dec:
                     return (f"Decoder {where} matched somewhere else in the line (value '{log[cap.start:cap.end]}') "
-                            f"instead of this '{kv.key}='; anchor the regex so it only matches this key."), \
+                            f"instead of this '{kv.key}{kv.sep}'; anchor the regex so it only matches this key."), \
                         (r"\s" + dec.regex_raw if dec.unanchored and dec.regex_raw else None)
             return f"Decoder {where} matched but captured nothing for '{kv.key}'.", None
         if start > kv.start:
@@ -775,7 +863,7 @@ class WazuhSpanEngine:
         raw = dec.regex_raw or ""
         shapes = {value_shape(kv)}
         prefix = log[kv.start - 1] if kv.start > 0 else ""
-        fix, _ = kv_regex(kv.key, shapes, {prefix})
+        fix, _ = kv_regex(kv.key, shapes, {prefix}, "colon" if kv.sep == ":" else "plain", _gap(log, kv))
         at_eol = kv.end >= len(log.rstrip())
         if re.search(r"\\s[+*]?\)?$", raw) and at_eol:
             return (f"Decoder {where} requires whitespace after the value, but '{kv.key}' ends the line. "
@@ -787,7 +875,7 @@ class WazuhSpanEngine:
         if re.search(r"\\d[+*]", raw) and not kv.value.isdigit():
             return (f"Decoder {where} expects digits, but the value '{kv.value}' is not numeric."), fix
         if raw.startswith(r"\s") and prefix != " ":
-            return (f"Decoder {where} expects a space before '{kv.key}=', but here it is "
+            return (f"Decoder {where} expects a space before '{kv.key}{kv.sep}', but here it is "
                     f"{'at the start of the log' if not prefix else repr(prefix)}."), fix
         return f"Decoder {where} did not match: {raw}", fix
 
@@ -832,8 +920,9 @@ class WazuhSpanEngine:
         values = [(kind, s, e, None) for kind, s, e in _value_tokens(log, blocked)]
         return log, program_name, kv_pairs, (json_at if parsed else None), values
 
-    def _format_suggestion(self, samples) -> Optional[Suggestion]:
+    def _format_suggestion(self, samples, root_name: Optional[str] = None) -> Optional[Suggestion]:
         """Root + child decoders for a log format no decoder handles (appended to local_decoder.xml).
+        With ``root_name`` (the missing <parent> of decoders tested alone): only that root.
 
         ``samples``: one or more (log, program_name, kv_pairs, json_at, values) of lines of that format.
         Each key gets one regex covering every value shape seen, checked on every sample.
@@ -842,12 +931,12 @@ class WazuhSpanEngine:
         header = [kv for kv in kv_pairs if kv.header]
         body = [kv for kv in kv_pairs if not kv.header and kv.value]
         base = (program_name or (f"{header[1].value}-{header[2].value}" if len(header) > 2 else None)
-                or ((f"{body[0].key}-{body[0].value}" if re.fullmatch(r"[\w.\-]{1,20}", body[0].value) else body[0].key)
+                or ((f"{body[0].key}-{body[0].value}" if re.fullmatch(r"[A-Za-z][\w.\-]{0,19}", body[0].value) else body[0].key)
                     if body else None)
                 or (log.split()[0] if log.split() else "log"))
-        name = "custom-" + re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")[:40]
+        name = root_name or "custom-" + re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")[:40]
         taken = {d.name for d in self.tree.decoders}
-        while name in taken:
+        while name in taken and not root_name:
             name += "-2"
 
         root = [f'<decoder name="{name}">']
@@ -876,6 +965,10 @@ class WazuhSpanEngine:
                     return None
                 root.append(f"  <prematch>{prematch}</prematch>")
         root.append("</decoder>")
+        if root_name:
+            return Suggestion(action="add_decoder", xml="\n".join(root),
+                              note=f"your decoders name '{root_name}' as <parent>, but it is not loaded: add this root "
+                                   "(placed before them) and they join the tree; review the prematch")
 
         parts = ["\n".join(root)]
         mode = kv_mode(kv_pairs)
@@ -959,13 +1052,13 @@ class WazuhSpanEngine:
 
 _KIND_LABEL = {
     "url": "URL", "email": "E-mail address", "path": "File path", "mac": "MAC address", "ip": "IP address",
-    "ipv6": "IPv6 address", "hash": "Hash", "quoted": "Quoted text", "number": "Number",
+    "ipv6": "IPv6 address", "hash": "Hash", "quoted": "Quoted text", "number": "Number", "field": "Field",
 }
 
 
 def _value_tokens(text: str, blocked: List[Tuple[int, int]]) -> List[Tuple[str, int, int]]:
-    taken: List[Tuple[int, int]] = list(blocked)
-    found: List[Tuple[str, int, int]] = []
+    found = _positional_fields(text, blocked)
+    taken: List[Tuple[int, int]] = list(blocked) + [(s, e) for _, s, e in found]
     for kind, pattern in _VALUE_PATTERNS:
         for m in pattern.finditer(text):
             s, e = m.span()

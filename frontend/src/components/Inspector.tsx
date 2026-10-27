@@ -71,7 +71,7 @@ export default function Inspector({ line, busy, onClose, onApply, onCopy }: Prop
         </Section>
 
         {line.new_decoder ? (
-          <Section title="Suggested decoder for this format">
+          <Section title="Suggested decoder">
             <SuggestionBox suggestion={line.new_decoder} busy={busy} onApply={onApply} onCopy={onCopy} />
           </Section>
         ) : null}
