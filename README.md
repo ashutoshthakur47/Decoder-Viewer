@@ -24,7 +24,7 @@ decoder, paste it, and the log updates at once; no Wazuh manager needed.
 
 | Decoded line | Line with no decoder |
 |---|---|
-| ![Inspector on a decoded line](docs/images/decoded-line.png) | ![Trace showing the prematch that failed](docs/images/no-decoder-line.png) |
+| ![Inspector on a decoded line](docs/images/decoded-line.png) | ![Children pasted without their root: the missing parent is suggested](docs/images/no-decoder-line.png) |
 
 | Decoder tested alone | Loading decoders |
 |---|---|
